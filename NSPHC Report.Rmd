@@ -1,0 +1,596 @@
+---
+title: "Exploratory Analysis of Mental Health Services and Imprisonment"
+output: html_document
+author:  Fatimazohra Koli (fak2116), Sithal Nimmagadda (sn2738), Bindi Patel (bpp2112), Carolyn Silverman (cas2275)
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE,
+                      message = FALSE, 
+                      cache = TRUE)
+```
+
+
+**I. Introduction**
+
+There are over 1.5 million prisoners in the United States, and prison inmates have higher rates of  chronic medical conditions, mental illness, and infectious diseases compared with the general population (Source: Bureau of Justice Statistics). Our interest in this topic stemmed from hearing and reading stories on the news of prisoners being denied access to medical care. As recent as March 2, 2018, Arizona prisons faced federal sanctions over prisoners' healthcare because prisoners were denied consistent care. (Source: [NPR](https://www.npr.org/2018/03/02/590121817/arizona-prisons-face-federal-sanctions-over-prisoners-health-care))
+
+After exploring various sources for potential data sets, we chose the National Survey of Prison Health Care because of the breadth of topics covered, which would allow us to explore different areas of the prison health care system. During our search for datasets, we did find a notable gap in  data regarding the provision of both mental health services as well as medical services delivered, and the mechanisms used to deliver these services to prisoners are not available. Due to even this data source not having complete data, we aggregated data from other sources to provide context. This data was in a cleaned form such as percentages. These data sources include: [Mental Health America](http://www.mentalhealthamerica.net/issues/access-mental-health-care-and-inc#arceration), U.S. Bureau of Justice Statistics data for 2016, U.S. Bureau of Justice Statistics Deaths in Custody Reporting Program, 2001 and 2005–2014, National Prisoner Statistics 2001 and 2005–2014, and Federal Bureau of Prisons, 2001 and 2005–2014.
+
+Fatimazohra Koli (fak2116): Fatima leveraged her background in mapping to create maps in GIS. The interactive component in d3 was completed by Fatima. She also augmented our analysis with the data from Mental Health America. 
+
+
+Sithal Nimmagadda (sn2738): Sithal did EDAV on the data from the Bureau of Justice Statistics and observed the demographics (Gender, Race, Age group, Marital Status, Education level, type of crime) of the jail inmates and prisoners visually. He also made visualizations of the number of deaths by cause of death (both naturally caused and un-natural deaths) across years. He also explored the trends in the missing data in the National Survey of Prison Health Care dataset. 
+
+
+Bindi Patel (bpp2112): Bindi conducted exploratory analysis on the data from the National Survey of Prison Health Care (NSPHC) and assessed the description and quality of the data. She further created visualizations from the U.S. Bureau of Justice Statistics for 2016 dataset, both as it related to NSPHC and independently,  as well as produced the narrative surrounding the report.
+
+
+Carolyn Silverman (cas2275): Carolyn extracted and explored the data quality and distributions of all variables directly related to mental health in the NSPHC dataset. She proceeded to develop a metric to approximate access to mental health services in prisons on the state level—the number of psychiatrists and clinical psychologists on staff per 100,000 inmates—and visualized the results in a map. She then joined the NSPHC dataset with tables from the U.S. Bureau of Justice Statistics Morality in State Prisons dataset and explored the relationship between access to mental health care and suicide rates in prisons through a scatter plot. Finally, she visualized the BJS morality dataset on its own by mapping suicides rates by state, and created line graphs for suicide rates over time broken down by demographics.
+
+
+
+
+**II. Description of Data**
+
+In 2010, the National Center for Health Statistics (NCHS) along with the Bureau of Justice Statistics (BJS) set out to conduct the National Survey of Prison Health Care (NSPHC). The survey was conducted by targeting one or more respondents in each of the fifty state Departments of Corrections as well as the Federal Bureau of Prisons. A questionnaire was answered by these respondents through a telephone interview. The data collection was for the calendar year 2011. The collection began in October 2012 and lasted until March 2013.
+
+The telephone interview covered ten topic areas of interest including staffing, specialty services, infectious disease, health risk, and mental health intake testing.
+
+At its conclusion, National Survey of Prison Health Care included data from 45 states from the semi-structured telephone interviews. Alaska, Massachusetts, Mississippi, Tennessee, West Virginia, and the Federal Bureau of Prisons did not participate.
+
+ 
+To obtain the dataset, we had to submit data use agreement forms to the Karishma A. Chari, M.P.H. at the National Center for Health Statistics outlining our use of the data as well as the protocol we would follow to ensure its security as well as its destruction upon completion of our analysis.
+
+Limitations of the data include the lack of complete respondents as well as the fact that any facility-level variation was not captured due to the data being gathered at the state level. Further, the extent to which certain services were available could not fully be captured with binary responses-- yes or no. Therefore qualitative comments were also included if need be. These qualitative comments were, however, able to be analyzed without applying NLP methods. Further, another noteworthy feature in the dataset was a high level of nonrepsonse for questions regarding contracting and staffing.  
+
+**III. Analysis of Data Quality**
+
+
+```{r}
+library(DAAG)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(tibble)
+library(readr)
+library(GGally)
+library(tidyverse)
+library(viridis)
+```
+
+```{r}
+NSPHC=read_delim("NSPHC Dataset_final.csv",delim = ",",col_names = TRUE)
+NSPHC$State = tolower(NSPHC$STATE_NAME)
+
+#adding Region & Division of states 
+census=data_frame(state.abb,state.region,state.division)
+colnames(census)[1]="STATE_ABB"
+NSPHC=merge(NSPHC,census,by='STATE_ABB',all=TRUE)
+NSPHC[NSPHC==9]=0
+
+
+
+missingdata=NSPHC%>%select(-STATE_ID,-STATE_NUM,-STATE_NAME)
+missingdata=gather(missingdata,key=name,values,-STATE_ABB)
+missingdata$missing=ifelse(missingdata$value==-9, "yes", "no")
+NSPHC[NSPHC==-9]=NA
+ggplot(missingdata, aes(y = STATE_ABB, x = name, fill = missing)) +
+  geom_tile(color = "white") + 
+  ggtitle("Missing Data Values") +
+  scale_fill_manual(values = c("#D8FF3C", "white","grey"),labels=c("No","Yes","Did Not Participate"))+
+    theme(text = element_text(size=5),
+        axis.text.x = element_text(angle=90, hjust=1)) + ylab("State Abbreviation") + xlab("Variable")
+
+```
+
+
+
+At first glance it is evident, that there is a large corpus of missing data within this dataset. Around 50% of the survey data is not present which can be seen in the figure above. 
+
+Alaska, Massachusetts, Mississippi, Tennessee, West Virginia, and the Federal Bureau of Prisons did not participate in the survey; thus, the respective corresponding rows are filled white with the exception of cells that were augmented through the joining of built in R data that provided state regions and divisions.
+
+There is a level of consistency in which questions are answered across states, which is evident through the strong vertical stripe patterns seen.
+There is a significant amount of missing data for sub-questions within topics. This can be seen where the visualization's columns alternates from primarily chartreuse filled cells to primarily white cells in an adjacent manner.   
+
+The data had "-9" for missing values; thus to clean this aspect we had to replace the "-9" with NAs. Likewise "9" was the the code for "Don't know" which we replaced with "0". This was largely a judgement call as we may have said that the values in this case were NA as well. The rationale for choosing 0 was that the survey participant had provided some degree of feedback when stating they did not know the answer. The NA's were indicative of no answer. We further augmented the data with the built in R state information for division and region to analyze other potential regional patterns. 
+
+The remainder of the data that we aggregated came from sources that had done pre-processing on the data. Thus, the data included the likes of percentages and statistical summaries. 
+
+
+**IV. Main Analysis**
+
+
+To provide context, we used data from U.S. Bureau of Justice Statistics for 2006-2016. This data had already been cleaned and provided numerical rates for comparison.  We first looked at the rates of imprisonment both at the federal and state levels and by gender. 
+
+
+```{r}
+Imprisonment_Rate =read_delim("p16t06.csv",delim = ",",col_names = TRUE,skip=2)
+Imprisonment_Rate=Imprisonment_Rate%>%select(Year,Total,`Federal/b`,State,Male,Female)%>%gather(key = "key", value = "value",-Year)%>%drop_na()
+
+
+Jurisdiction=Imprisonment_Rate%>%filter(key=="State"|key=="Federal/b"|key=="Total")
+
+Gender=Imprisonment_Rate%>%filter(key=="Female"|key=="Male")
+
+ggplot(Jurisdiction, aes(x=Year)) +
+geom_line(aes(y=value,color=key),size=2)+  ggtitle("Number of Prisoners Per 100,000 people by Jurisdiction")+scale_color_viridis(discrete=TRUE)
+
+ggplot(Gender, aes(x=Year)) +
+geom_line(aes(y=value,color=key),size=2)+ ggtitle("Number of Prisoners Per 100,000 people by Gender")+scale_color_viridis(discrete=TRUE)
+
+
+
+
+```
+
+
+
+It is evident that while the federal rate remained constant, the state and, thus, the total rate decreased. Furthermore, the rate of female prisoners per 100,000 people remained relatively constant from 2006 to 2016 while for males it decreased. The rate of male prisoners per 100,000 people was about four times as much as the rate for females. 
+
+Looking at a more granular view of the number of prisoners per 100,000 people by states, we see the same trend: there is a clear decrease in the number of prisoners from 2015 to 2016.
+
+
+```{r}
+Imprisonment_Rate_State=read_delim("p16t07.csv",delim = ",",col_names = TRUE,skip=2)
+Imprisonment_Rate_State=Imprisonment_Rate_State%>%select(-X1)%>%arrange(desc(`Total 2016`))
+
+TotalbyStates=Imprisonment_Rate_State%>%select(Jurisdiction,`Total 2015`,`Total 2016`)%>%arrange(desc(`Total 2016`))%>%gather(key,value,-Jurisdiction)%>%group_by(key)%>%arrange(desc(`value`))%>%ungroup()
+
+TotalbyStates$Jurisdiction=as.factor(TotalbyStates$Jurisdiction)
+
+ggplot(TotalbyStates, aes(Jurisdiction, value)) +   
+  geom_bar(aes(fill = key), position = "dodge", stat="identity")+coord_flip()+  ggtitle("Number of Prisoners Per 100,000 people by Jurisdiction")+scale_fill_viridis(discrete=TRUE)
+
+ggplot(TotalbyStates, aes(Jurisdiction, value)) +
+        geom_line(aes(group = Jurisdiction)) +
+        geom_point(aes(color = key))+coord_flip()+  ggtitle("Number of Prisoners Per 100,000 people by Jurisdiction")+scale_color_viridis(discrete=TRUE)
+
+
+```
+ 
+ 
+To preserve ease of locating a particular state, the states remain in alphabetical order. Because of the large amount of rows, 2 per jurisdiction, we made a Cleveland dot plot to analyze the change in the number of prisoners per 100,000 people. The majority of purple dots indicating the total for 2015 are to the right of the yellow dots indicating the total for 2016 showing that even at the state level, the majority of states saw a decrease in the number of prisoners. 
+
+Because we were initially interested in exploring the state of mental health within the prison system, we next decided to explore psychological distress in different demographic groups in prisons and jails at a high level.  
+
+```{r}
+library(reshape2)
+
+df <- read.csv("Serious_Psy.csv", sep = ',')
+data.m <- melt(df, id.vars='Inmates_Serious_psychological_distress')
+
+ggplot(data.m, aes(Inmates_Serious_psychological_distress, value)) + 
+    geom_bar(aes(fill = variable), width = 0.4, 
+             position = "dodge", stat="identity") + labs(x = "Jail inmates and Prisoners having serious psychological distress",
+         y = "Percentage") + labs(fill = "Gender")+scale_fill_viridis(discrete=TRUE)
+
+```
+
+Both female inmates and prisoners were reported to have serious psychological distress compared to males.
+
+
+
+```{r}
+df <- read.csv("serious_psy_race.csv", sep=',')
+data.m <- melt(df, id.vars='Inmates_serious_psychological')
+
+ggplot(data.m, aes(Inmates_serious_psychological, value)) + 
+    geom_bar(aes(fill = variable), width = 0.4, 
+             position = "dodge", stat="identity") + labs(x = "Jail inmates and Prisoners Having Serious Psychological Distress",
+         y = "Percentage") + labs(fill = "Race")+scale_fill_viridis(discrete=TRUE)
+
+```
+
+White prisoners and inmates had the highest prevelance of serious psychological distress.
+
+
+```{r}
+
+df <- read.csv("crime_serious_psy.csv",  sep=',')
+data.m <- melt(df, id.vars='Inmates_serious_psychological')
+
+ggplot(data.m, aes(Inmates_serious_psychological, value)) + 
+    geom_bar(aes(fill = variable), width = 0.4, 
+             position = "dodge", stat="identity") +
+    labs(x = "Jail inmates and Prisoners having serious psychological problems",
+         y = "Percentage") + labs(fill = "Crime")+scale_fill_viridis(discrete=TRUE)
+
+```
+
+People involved in crimes against others (i.e. violent and property crimes) had the highest prevelance of serious psychological problems.
+
+Overall, we see prisoners across demographics and crimes committed have relatively smaller percentages of psychological problems compared to jail inmates.
+
+After establishing some context, we then moved into the National Survey of Prison Health Care. We merged the primary data source from the U.S. Bureau of Justice Statistics for 2006-2016 with this data source to see how the Number of Prisoners by Jurisdiction had changed from 2011 to 2015. 
+The results were not as expected.  The value the total number of prisoners in custody in 2011  was significantly smaller than for 2015. This did not support the trend in the first graph showing number of prisoners per year. Further given the fact the U.S. Bureau of Justice Statistics was scaled to per 100,000 people by Jurisdiction while the documentation for NSPHC did not indicate any scaling, this further made us question the given counts.
+We delved deeper into both datasets to see if there had been a difference in functional definition that drove this difference. Our initial hypothesis was that the definition of inmate or correctional facility had been different across these two sources. However, we were unable to find adequate documentation that provided insight on this manner as despite a legal definitional difference between inmate and prisoner, the NSPHC used the terms interchangeably. We also followed up with our contact, Karishma A. Chari, M.P.H. at the National Center for Health Statistics, who was unable to respond and shed light on this issue. 
+
+We shifted gears to focusing on NSPHC despite its limitations. We decided to explore the states by number of inmates in custody as well as the number of new admits within the year 2011. Given the geographic nature of the variable, we used a map to see if there were any underlying regional patterns. 
+
+
+
+
+```{r}
+library(fiftystater)
+library(colorplaner)
+data("fifty_states")
+ggplot(NSPHC, aes(map_id = State)) + 
+  geom_map(aes(fill = TOTCUST), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  + 
+  ggtitle("Total inmates in state prison system on 12/3/2011")+
+  theme(legend.text = element_text(size=8))+ scale_fill_viridis() 
+
+ggplot(NSPHC, aes(map_id = State)) + 
+  geom_map(aes(fill = TOTADMIT), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  + 
+ ggtitle("Total new admits to state prison in 2011 calendar year")+
+  theme(legend.text = element_text(size=8))+ scale_fill_viridis() 
+
+```
+
+Upon inspection, we noticed that the color of a particular state across the two maps seemed relatively similar. To address whether there was a relationship between total inmates in the prison system on 12/31/2011 and the number of new inmates in 2011, we created a scatter plot and added a smoother to highlight any relationship.
+
+
+```{r}
+ggplot(NSPHC, aes(x=TOTADMIT,y=TOTCUST)) +
+  geom_point(color="navy")+  ggtitle("Total Prisoners versus Total New Admits")+geom_smooth(color="blue")
+
+```
+
+Even without the smoother, it is evident that there seems to be a positive association between total inmates in the prison system on 12/31/2011 and the number of new inmates in 2011. 
+
+We then analyzed the myriad of on site health services available to prisoners to understand whether there was a trend regionally in the types of care available to inmates.
+
+
+
+```{r}
+library(ggalluvial)
+library(plyr)
+services=NSPHC[,c(149,153,157,161,165,169,173,177,181,185,264,265)]
+services[services==NA]="Missing"
+services[services==1]="Yes"
+services[services==2]="No"
+services[services==-9]="Missing"
+services[services==""]="Missing"
+services=count(services)
+
+ggplot(services,aes(weight = freq, axis0=state.region, axis1 = CARDIO_ON, axis2 = PSYCH_ON, axis3=DIAL_ON, axis4=GYN_ON, axis5=OB_ON, axis6=OPTO_ON,axis7=OPHTH_ON,axis8=ORTHO_ON,axis9=ONCO_ON,axis10=ORAL_ON)) +
+  geom_alluvium(aes(fill=state.region),width = 1/16)+
+  geom_stratum(width = 1/10, fill = "white", color = "black")+guides(fill = FALSE) +
+  scale_x_continuous(breaks = 1:11, labels = c("State Region","Cardiology", "Psychiatry", "Dialysis","Gynecology","Obstetrics","Optometry","Ophthalmology","Orthopedic","Oncology","Oral surgery"))+  ggtitle("On-site Services") +geom_label(stat = "stratum", label.strata = TRUE)+scale_fill_viridis(discrete=TRUE)
+
+
+```
+
+
+
+
+
+Given the large amount of variables, the alluvial diagram did not provide much insight. Major takeaways included the fact a regional analysis of the qualitative data may not be provide a good lens of understanding as the colored bands diverge greatly. Most states did not have oncology for example but they did have psychiatry services. 
+
+Since our initial interest was in the mental health of the prison population, we decided to further explore Psychiatry services further. First we wanted to see if psychiatry services were available to all prisoners regardless of method of delivery. Here we removed states who did not participate in the survey and created another alluvial diagram. 
+
+
+```{r}
+
+psych=NSPHC[,c(1,153,154,155,156,264,265,261)]
+psych[psych==1]="Yes"
+psych[psych==2]="No"
+psych=psych %>% filter(STATE_ABB != "AK" & STATE_ABB != "MA" & STATE_ABB != "MS" & STATE_ABB != "TN" & STATE_ABB != "WV" )
+psych[psych==-9]="Missing"
+pysch_freq = count(psych)
+
+ggplot(pysch_freq,aes(weight = freq,axis0=state.region,axis1 = PSYCH_ON, axis2 = PSYCH_OFF, axis3=PSYCH_TELE, axis4=PSYCH_NA)) +
+ geom_alluvium(aes(fill=state.region,width = 1/20))+
+  geom_stratum(width = 1/10, fill = "white", color = "black")+guides(fill = FALSE) +geom_label(stat = "stratum", label.strata = TRUE) +
+  scale_x_continuous(breaks = 1:5, labels = c("Region", "On site", "Off site", "Telemedicine", "Not Avaliable")) +  ggtitle("Psychiatry Services Available")+scale_fill_viridis(discrete=TRUE)
+
+```
+
+We see that all states that have provided information have some form of Psychiatry service, and most also have Telemedicine available. 
+
+After examining access to mental health services in prisons at the state level, we decided to look at access to these services outside of prisons, also at the state level, and its correlation with incarceration rates. We used data available from Mental Health America. 
+
+We first separately map access to mental health services outside of prisons and incarceration rates individually:
+
+![](map2.png)
+![](map1.png)
+
+We see that in the lower right quadrant of both maps, values are higher: that is less access to mental healthcare services corresponds to higher rates of incarceration in state prisons. We further explore this relationship in the following scatter plot that compares rates of incarceration in state prison per 100,000 residents with access to mental health care ranking. We can see a strong positive correlation between rates of prisoners in the criminal justice system and the lack of access to mental health services. A key distinction to make here is that the access ranking system is counter-intuitive. Namely, a higher value indicates lower access to health care. 
+
+```{r}
+## NOTES: link to source: #http://www.mentalhealthamerica.net/issues/access-mental-health-care-and-inc#arceration
+## imprisonment = state imprisonment (per 100K)
+## access = access to care ranking(sum of scores)
+## where least access to health care is positive
+##rank is the rank of number of prisoners 
+df <- read_delim("mentalhealth.csv",delim = ",",col_names = TRUE)
+
+
+ggplot(df, aes(imprisonment, access)) + geom_point(color="navy") 
+
+ggplot(df, aes(reorder(state, access), access)) + geom_col(fill="grey") + coord_flip()
+
+df <- df[order(df$access, decreasing = F),]
+df$accessrank <- c(1:50)
+ggplot(df, aes(rank, accessrank)) + geom_point(color="navy")
+```
+
+A key finding here is that states that have less access to mental health care have more individuals who are in the criminal justice system.
+
+After exploring access to mental health care (outside of prisons) at the state level and how it correlates with state imprisonment, we decided it would be interesting to explore the relationship between access to mental health care within prisons and suicide rates. To study this relationship, we joined the NSPHC dataset with tables from the U.S. Bureau of Justice Statistics Morality in State Prisons dataset from 2001-2014.
+
+We first looked into the total number of psychiatrists and clinical psychologists normalized for total inmates in custody by state. This was the best metric we could establish for mental health services provided in state prisons given the large number of missing variables in the NSPHC dataset. After mapping this metric to look for regional relationships, we looked at suicides in state/federal prisons per 100,000 inmates (2001-2014). 
+
+
+```{r} 
+#deaths by cause and jurisdiction 2001-2014
+moralitycause=read_csv("msp0114st/msp0114stt14.csv", skip=11)
+moralitycause = moralitycause[-c(53:61),]
+moralitycause$Jurisdiction = with(moralitycause, c(Jurisdiction[1:2], X2[3:nrow(moralitycause)])) 
+moralitycause = moralitycause %>% select(Jurisdiction, Suicide)
+moralitycause = moralitycause[-c(1:2),]
+moralitycause$Jurisdiction <- gsub('/d', '', moralitycause$Jurisdiction)
+
+#merge datasets
+NSPHC_morality <- merge(NSPHC, moralitycause, 
+                        by.x = "STATE_NAME", by.y = "Jurisdiction", 
+                        all.x=T, all.y=F)
+
+ggplot(NSPHC, aes(map_id = State)) + 
+  geom_map(aes(fill = 100000* (PSCHTOT + CLINPSCHTOT)/TOTCUST), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  + 
+  ggtitle("Number of psychiatrists and clinical psychologists\nper 100,000 inmates in state prison (2011)") +
+  scale_fill_viridis(name = "") 
+
+
+ggplot(moralitycause, aes(map_id = tolower(Jurisdiction))) + 
+  geom_map(aes(fill = Suicide), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  + 
+  ggtitle("Suicides in state prisons per 100,000 inmates (2001-2014)") +
+  scale_fill_viridis(name = "") 
+```
+
+Finally, we created the scatter plot below of the two measures mapped above to see if there was any correlation between access to mental health and suicides in state prisons. With the exception of the 5 states that have a disproportionately high number of psychiatrists and clinical psychologists, we see a downward trend in the graph: that is, as the relative number of mental health staff increases, the relative number of suicides decreases in state prisons. Furthermore, the two states with by far the highest suicides rates are on the lower end of the spectrum for access to mental health staff.
+
+```{r}
+ggplot(NSPHC_morality, aes(x = 100000* (PSCHTOT + CLINPSCHTOT)/TOTCUST, y=Suicide)) + 
+  geom_point(color="maroon") + geom_smooth(method = "loess") +
+  xlab('Psychiatrists and clinical psychologists per 100,000 inmates') +
+  ylab('Suicides in state prisons per 100,000 inmates') +
+  ggtitle('Suicides vs Access to Mental Health Staff in State Prisons')
+
+```
+
+
+Next, we chose to examine the trends in the suicide rates in state and federal prisons over time. Unfortunately, the mental health data from NSPHC was only available for a single year, 2011, so we could not look at the changes in the correlation between suicides and access to mental health services over time. Instead, we examined trends in suicide rates in federal and state prisons by different demographic groups. Below, we look at race: 
+
+
+```{r}
+#read in and clean data
+suicides_time = read_csv("msp0114st/msp0114stat08.csv", skip = 10)
+suicides_time = suicides_time %>% select(Characteristic, X2, `2003`, `2005`, `2006`, `2007`, `2008`, `2009`,`2010`,
+                                          `2011`, `2012`, `2013`, `2014`)
+suicides_time = suicides_time[-c(2,5,10,17:22),] %>% select(-Characteristic)
+names(suicides_time)[1] = 'Characteristic'
+
+#suicides by race
+suicides_race = suicides_time[4:7,]
+suicides_race$Characteristic = c("White", "Black/African American", "Hispanic/Latino", "Other")
+names(suicides_race)[1] = "Race"
+#make data tidy
+suicides_race_tidy = gather(suicides_race, year, suicides, -Race)
+
+x_labs = c("2003", "2004", names(suicides_race)[-c(1,2)])
+
+ggplot(suicides_race_tidy, aes(as.numeric(year), suicides, color = Race)) + geom_line() +
+  scale_x_continuous(name = "Year", breaks = seq(2003, 2014, 1), labels = x_labs) +
+  ylab("Suicides per 100,000 inmates by race") + 
+  ggtitle("Suicides in State/Federal Prisons 2003-2014")+scale_color_viridis(discrete=TRUE)
+
+```
+
+It is evident that the number of suicides per 100,000 inmates for both African American/Black inmates as well as White inmates has increased since 2010. The number of suicides per 100,000 inmates for Hispanic/Latino inmates is in between that of African American/Black inmates and White inmates. From the years 2003-2014 the number of suicides per 100,000 inmates for White inmates has been greater than African American/Black inmates 
+
+To continue our analysis of prison health, we transitioned from the state to the local level and analyzed the cause of death in local jails provided by the U.S. Bureau of Justice Statistics. 
+
+
+```{r}
+
+df <- read.csv("local_jail_deaths.csv", header = TRUE, sep=',',
+               stringsAsFactors=FALSE, check.names = FALSE)
+
+#illness <- df[3:7,]
+illness <- df[c(3:7,9:12,14),]
+
+rownames(illness) <- illness$Cause_of_death
+illness <- illness[,-1]
+illness_t <- as.data.frame(t(illness))
+illness_t$year <- rownames(illness_t)
+
+df_illness_t <- gather(illness_t, key = "cause", value = "cases", -year)
+df_illness_t$cases <- as.numeric(df_illness_t$cases)
+# df_illness_t$year <- as.numeric(df_illness_t$year)
+df_illness_t$cause <- with (df_illness_t, reorder(cause, cases))
+ggplot(df_illness_t, aes(x=year, y=cases,  
+                         order= - cases, group=cause)) +
+    geom_line(aes(color = cause)) + guides(colour = guide_legend(reverse=T))+scale_color_viridis(discrete=TRUE)
+
+
+
+```
+
+Due to the concentration of the lines in the bottom of the line graph seen above we decided to separate our analysis of cause of death by natural and unnatural cause.
+
+First we analyzed natural causes of death. We see that heart disease prevail as the leading natural cause of death. 
+
+```{r}
+df <- read.csv("local_jail_deaths.csv", header = TRUE, sep=',',
+               stringsAsFactors=FALSE, check.names = FALSE)
+
+#illness <- df[3:7,]
+illness <- df[c(3:7),]
+
+rownames(illness) <- illness$Cause_of_death
+illness <- illness[,-1]
+illness_t <- as.data.frame(t(illness))
+illness_t$year <- rownames(illness_t)
+
+df_illness_t <- gather(illness_t, key = "cause", value = "cases", -year)
+df_illness_t$cases <- as.numeric(df_illness_t$cases)
+# df_illness_t$year <- as.numeric(df_illness_t$year)
+df_illness_t$cause <- with (df_illness_t, reorder(cause, cases))
+ggplot(df_illness_t, aes(x=year, y=cases,  
+                         order= - cases, group=cause)) +
+    geom_line(aes(color = cause)) + guides(colour = guide_legend(reverse=T))+scale_color_viridis(discrete=TRUE)
+
+
+```
+
+We then filtered out the diseases of natural causes.
+
+```{r}
+
+df <- read.csv("local_jail_deaths.csv", header = TRUE, sep=',',
+               stringsAsFactors=FALSE, check.names = FALSE)
+
+#illness <- df[3:7,]
+illness <- df[c(9:12,14),]
+
+rownames(illness) <- illness$Cause_of_death
+illness <- illness[,-1]
+illness_t <- as.data.frame(t(illness))
+illness_t$year <- rownames(illness_t)
+
+df_illness_t <- gather(illness_t, key = "cause", value = "cases", -year)
+df_illness_t$cases <- as.numeric(df_illness_t$cases)
+# df_illness_t$year <- as.numeric(df_illness_t$year)
+df_illness_t$cause <- with (df_illness_t, reorder(cause, cases))
+ggplot(df_illness_t, aes(x=year, y=cases,  
+                         order= - cases, group=cause)) +
+    geom_line(aes(color = cause)) + guides(colour = guide_legend(reverse=T))+scale_color_viridis(discrete=TRUE)
+```
+
+Given non-natural causes of death, we see that suicide is the leading cause of death followed by Drug/alcohol intoxication. There is also a peak in 2008 of missing data which is related to a trough in the number of reported deaths by suicide and by Drug/alcohol intoxication. 
+
+
+
+
+**V. Executive Summary (Presentation-style)**
+
+This project set out to explore access to mental health care services in the criminal justice system after hearing and reading stories on the news of prisoners being denied access to medical care, particularly mental health care. Because of limitations of data on mental health care, we opened up our analysis to include trends in imprisonment over time, access to mental healthcare outside of the criminal justice system, and causes of death in prisons at the local and state levels.
+
+Our first plot provides context for the number of prisoners in the state systems. We visualize the change in the number of prisoners per 100,000 people by state from 2015 to 2016. To preserve ease of locating a particular state, the states remain in alphabetical order. The majority of black dots indicating the total for 2015 are to the right of the orange dots indicating the total for 2016 showing that at the state level, the majority of states saw a decrease in the number of prisoners. 
+
+```{r, echo=F}
+TotalbyStates=TotalbyStates%>%filter(Jurisdiction!="U.S. total" & Jurisdiction!="Federal" )
+ggplot(TotalbyStates, aes(Jurisdiction, value)) +
+        geom_line(aes(group = Jurisdiction)) +
+        geom_point(aes(color = key)) + coord_flip() + ylab("Number of Prisoners Per 100,000") + ggtitle("Number of Prisoners Per 100,000 People by Jurisdiction") + scale_color_colorblind() 
+```
+
+Next, we examined access to mental health care at the state level outside of prisons, using data available from Mental Health America. The following plot displays access to mental health care services by state ordered by access rank score. A key distinction to make here is that the access ranking system is counter-intuitive; a higher value indicates lower access to health care. The dataset documentation and accompanying paper do not divulge the exact formula used to calculate this ranking score.
+
+```{r, echo=F}
+df <- read_delim("mentalhealth.csv",delim = ",",col_names = TRUE)
+ggplot(df, aes(reorder(state, access), access)) + geom_col(fill="navy") + coord_flip()+ scale_color_colorblind() +xlab("State") + ylab("Access to Mental HealthCare Services")
+```
+
+The following scatter plot compares rates of incarceration in state prison per 100,000 residents with access to mental health care ranking. There is a strong positive correlation between State Imprisonment per 100,000 People and the lack of access to mental health services.  
+
+```{r, echo=F}
+ggplot(df, aes(imprisonment, access)) + geom_point(color="navy")+ggtitle("Access to Care versus State Imprisonment per 100,000 People")+xlab("State Imprisonment per 100,000")+ylab("Acess to Care")
+
+```
+
+After looking at how access to mental health care outside the criminal justice system correlates with state imprisonment, we chose to examine how access to mental health care services within prisons correlated with suicide rates. 
+
+```{r, echo=F}
+ggplot(NSPHC_morality, aes(x = 100000* (PSCHTOT + CLINPSCHTOT)/TOTCUST, y=Suicide)) + 
+  geom_point(color="navy") + geom_smooth(method = "loess") +
+  xlab('Psychiatrists and clinical psychologists per 100,000 inmates') +
+  ylab('Suicides in state prisons per 100,000 inmates') +
+  ggtitle('Suicides vs Access to Mental Health Staff in State Prisons')
+```
+
+With the exception of the 5 states that have a disproportionately high number of psychiatrists and clinical psychologists, we see a downward trend in the graph: that is, as the relative number of mental health staff increases, the relative number of suicides decreases in state prisons. Furthermore, the two states with by far the highest suicides rates are on the lower end of the spectrum for access to mental health staff.
+
+Finally, we explored the causes of death in prisons at the local and state levels over time. Unfortunately, the mental health data from NSPHC was only available for a single year, 2011, so we could not look at the changes in the correlation between cause of death and access to mental health services over time.
+
+The following line graph shows cause of death from 2005 to 2014 for unnatural causes. Suicides in local jails is surprisingly the highest unnatural cause of death from 2000-2014. Even considering natural causes of death as we did in our main analysis, suicide still accounts for the greatest number of deaths at the local level.
+
+
+```{r, echo=F}
+library(scales)
+library(ggthemes)
+
+df_illness_t = df_illness_t[df_illness_t$year!=2000,]
+
+ggplot(df_illness_t, aes(x=year, y=cases,  
+                         order= - cases, group=cause)) +
+    geom_line(aes(color = cause)) + guides(colour = guide_legend(reverse=T))+ scale_colour_colorblind()+ggtitle("Number of Deaths in Local Jails by Cause (2005-2014)")
+
+```
+
+In contrast, at the state level, unnatural causes of deaths, which include suicides and homicides, was far outnumbered by natural causes of death, such as cancer and heart disease. This startling difference between causes of deaths in state prisons and local jails deserves further analysis; however, our datasets did not contain features that enabled us to explore this finding.
+
+```{r, echo = F}
+df_statedeath = read.csv('state_causeofdeath.csv')
+
+df_statedeath_t <- gather(df_statedeath, key = "cause", value = "cases", -Year)
+df_statedeath_t$cases <- as.numeric(df_statedeath_t$cases)
+#df_statedeath_t$Year <- as.numeric(df_statedeath_t$Year)
+df_statedeath_t$cause <- with(df_statedeath_t, reorder(cause, cases))
+
+df_statedeath_t = df_statedeath_t[df_statedeath_t$Year!=2003,]
+
+labs = as.character(seq(2005, 2014, 1))
+
+ggplot(df_statedeath_t, aes(x=Year, y=cases,  
+                         order= - cases, group=cause)) +
+    geom_line(aes(color = cause)) + guides(colour = guide_legend(reverse=T))+ scale_color_viridis(discrete = T, option = "magma")+ggtitle("Number of Deaths in State Prisons per 100,000 inmates\nby Cause (2005-2014)") +
+  scale_x_continuous(breaks = seq(2005,2014,1), labels = labs)
+```
+
+The following section contains links to our interactive maps and plots created in D3, which further explore the findings described above.
+
+**VI. Interactive Component **
+
+The interactive component can be found at the following 3 links:  
+
+https://bl.ocks.org/fatimakoli/raw/f7fe27f0809f61e9e9029373b9750a2f/f44bf25adbbb9245b99e2cec6cc5627fb0f762e9/
+
+http://bl.ocks.org/fatimakoli/raw/e9b71925efdae95051fb64653ac3bdad/c426e6e495360c1de6bb4482f399a34aa1035d86/
+
+http://bl.ocks.org/fatimakoli/raw/e9b71925efdae95051fb64653ac3bdad/7a050455dea5ff6c3bd254b43dc9a0d93af6350d/
+
+**VII. Conclusion**
+
+We were vastly limited by the lack of data not only in our chosen data source but also across data sources about prisons in the United States. Further, the functional definitions of the likes of correctional facility and prisoner in the various data sets were not defined transparently leading us to question the reliability of joining data sets from two different United States government institutions such as the CDC and the U.S. Bureau for Justice Statistics. 
+
+In the future, we are interested in exploring potential relationships between prison healthcare offerings on a regional bases. We may potentially augment our current data source with the likes of party affiliation or other state or regional level psychometric variable analysis (i.e. racial resentment, trust in institutions) from poll data. We hope that our analysis, though not complete due to the lack of data, highlights the sheer unavailability of information and data about individuals within the United States prison system and lack of transparency not only in regards to their access to health but also in various other reportings in relation to prisoners in general. We see that suicides are startlingly the leading cause of death in local jails; however, we do not see this level of transparency in what is done to prevent suicides.  
